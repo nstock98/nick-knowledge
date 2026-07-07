@@ -1,6 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createKnowledgeItem } from '../lib/notion';
 import { answerQuestion } from '../lib/qa';
+import { classifyMessage, fileItem } from '../lib/router';
 
 // Escape a keyword for safe use inside a RegExp.
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -59,27 +60,35 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
   const urlMatch = message.match(/https?:\/\/[^\s]+/);
 
-  // No link in the message — treat it as a question for the Second Brain
-  // instead of something to save.
+  // No link in the message — use the AI router: either file it into the
+  // right dashboard database (task, shopping, idea, expense, ...) or, if
+  // it's a question, answer it from the Second Brain.
   if (!urlMatch) {
-    const question = message.trim();
-    if (!question) {
+    const text = message.trim();
+    if (!text) {
       return res.status(200).send('<Response></Response>');
     }
 
     try {
-      const answer = await answerQuestion(question);
-      const truncated = answer.length > 1500 ? answer.slice(0, 1450) + '…' : answer;
-      return res.status(200).send(`<Response><Message>${xmlEscape(truncated)}</Message></Response>`);
-    } catch (qaError) {
-      console.error('Q&A error:', qaError);
+      const routed = await classifyMessage(text);
+
+      if (routed.intent === 'question') {
+        const answer = await answerQuestion(text);
+        const truncated = answer.length > 1500 ? answer.slice(0, 1450) + '…' : answer;
+        return res.status(200).send(`<Response><Message>${xmlEscape(truncated)}</Message></Response>`);
+      }
+
+      const confirmation = await fileItem(routed);
+      return res.status(200).send(`<Response><Message>${xmlEscape(confirmation)}</Message></Response>`);
+    } catch (routeError) {
+      console.error('Routing error:', routeError);
       return res
         .status(200)
-        .send('<Response><Message>Sorry, I had trouble answering that one — try again in a bit.</Message></Response>');
+        .send('<Response><Message>Sorry, I had trouble with that one — try again in a bit.</Message></Response>');
     }
   }
 
-  // A link is present — save it as before.
+  // A link is present — save it to Saved Items as before.
   try {
     const url = urlMatch[0];
     const description = message.replace(url, '').replace(/^[\s\-]+/, '').trim();
@@ -95,7 +104,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     });
 
     return res.status(200).send(
-      `<Response><Message>Saved to ${xmlEscape(category)}: ${xmlEscape(url.substring(0, 60))}</Message></Response>`
+      `<Response><Message>🔖 Saved to ${xmlEscape(category)}: ${xmlEscape(url.substring(0, 60))}</Message></Response>`
     );
   } catch (error) {
     console.error('Processing error:', error);
