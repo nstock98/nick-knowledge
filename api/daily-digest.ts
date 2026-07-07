@@ -1,8 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import { queryKnowledgeItems, KnowledgeItem } from '../lib/notion';
 
 // --- Required environment variables (set these in Vercel Project Settings) ---
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 // The Twilio WhatsApp sender, e.g. 'whatsapp:+14155238886' (your sandbox number)
@@ -27,30 +26,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-    const itemsRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/knowledge_items?created_at=gte.${since}&order=created_at.asc&select=url,description,category,content_title,created_at`,
-      {
-        headers: {
-          apikey: SUPABASE_KEY!,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      }
-    );
-
-    if (!itemsRes.ok) {
-      const err = await itemsRes.text();
-      console.error('Supabase fetch failed:', err);
-      return res.status(500).json({ error: 'Failed to fetch items', details: err });
-    }
-
-    const items: Array<{
-      url: string;
-      description: string | null;
-      category: string | null;
-      content_title: string | null;
-      created_at: string;
-    }> = await itemsRes.json();
+    const items = await queryKnowledgeItems({ sinceISO: since, pageSize: 100 });
 
     const message = buildMessage(items);
 
@@ -80,23 +56,16 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     return res.status(200).json({ ok: true, itemCount: items.length });
   } catch (error) {
     console.error('Daily digest error:', error);
-    return res.status(500).json({ error: 'Digest failed' });
+    return res.status(500).json({ error: 'Digest failed', details: String(error) });
   }
 };
 
-function buildMessage(
-  items: Array<{
-    url: string;
-    description: string | null;
-    category: string | null;
-    content_title: string | null;
-  }>
-): string {
+function buildMessage(items: KnowledgeItem[]): string {
   if (items.length === 0) {
     return '📚 Second Brain — nothing filed in the last 24 hours.';
   }
 
-  const byCategory: Record<string, typeof items> = {};
+  const byCategory: Record<string, KnowledgeItem[]> = {};
   for (const item of items) {
     const cat = item.category || 'Uncategorized';
     (byCategory[cat] ||= []).push(item);
@@ -107,9 +76,9 @@ function buildMessage(
   for (const [cat, catItems] of Object.entries(byCategory)) {
     lines.push(`*${cat}* (${catItems.length})`);
     for (const item of catItems) {
-      const title = item.content_title || item.description || item.url;
+      const title = item.name || item.description || item.url;
       lines.push(`• ${title}`);
-      lines.push(`  ${item.url}`);
+      if (item.url) lines.push(`  ${item.url}`);
     }
     lines.push('');
   }
@@ -118,7 +87,7 @@ function buildMessage(
 
   // Keep it well under WhatsApp's message size limits.
   if (message.length > WHATSAPP_CHAR_LIMIT) {
-    message = message.slice(0, WHATSAPP_CHAR_LIMIT - 60) + '\n…(truncated — see the dashboard for the rest)';
+    message = message.slice(0, WHATSAPP_CHAR_LIMIT - 60) + '\n…(truncated — see Notion for the rest)';
   }
 
   return message;
