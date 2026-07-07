@@ -3,25 +3,41 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
+// Escape a keyword for safe use inside a RegExp.
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Word-boundary match instead of naive substring match.
+// (Substring matching previously caused false positives — e.g. the Work
+// keyword "ai" matched inside "training", "explain", "email", "maintain", etc.)
+const hasKeyword = (text: string, keyword: string) => {
+  const re = new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i');
+  return re.test(text);
+};
+
 const classifyItem = (description: string) => {
   const desc = description.toLowerCase();
-  const patterns = {
-    'Fitness': ['recipe', 'meal', 'protein', 'gym', 'workout', 'training', 'diet', 'nutrition', 'weight', 'bulk', 'cut', 'cook', 'food'],
+
+  const patterns: Record<string, string[]> = {
     'Work': ['pm', 'construction', 'variation', 'eot', 'invoice', 'documentation', 'client', 'builder', 'project', 'automation', 'ai'],
     'Finance': ['invest', 'stock', 'etf', 'property', 'wealth', 'budget', 'finance', 'money', 'crypto', 'portfolio', 'share'],
-    'Side Hustles': ['business', 'side', 'consulting', 'agency', 'freelance', 'startup', 'product', 'launch', 'growth', 'marketing', 'sales']
+    'Fitness': ['gym', 'workout', 'training', 'exercise', 'lift', 'lifting', 'cardio', 'muscle', 'strength', 'reps', 'sets', 'run', 'running'],
+    'Food & Recipes': ['recipe', 'meal', 'cook', 'cooking', 'food', 'dinner', 'lunch', 'breakfast', 'ingredient', 'protein', 'diet', 'nutrition', 'snack', 'bulk', 'cut'],
+    'Side Hustles': ['business', 'side', 'consulting', 'agency', 'freelance', 'startup', 'product', 'launch', 'growth', 'marketing', 'sales'],
   };
 
-  let bestMatch = 'Side Hustles';
+  let bestMatch = 'Uncategorized';
   let bestScore = 0;
 
   for (const [category, keywords] of Object.entries(patterns)) {
-    const score = keywords.filter(kw => desc.includes(kw)).length;
+    const score = keywords.filter((kw) => hasKeyword(desc, kw)).length;
     if (score > bestScore) {
       bestScore = score;
       bestMatch = category;
     }
   }
+
+  // No keyword matched anything — be honest about it instead of
+  // silently forcing every ambiguous item into "Side Hustles".
   return bestMatch;
 };
 
@@ -68,9 +84,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         'apikey': SUPABASE_KEY!,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
+        'Prefer': 'return=minimal',
       },
-      body: JSON.stringify({ url, description, category, tags, metadata, status: 'new' })
+      body: JSON.stringify({ url, description, category, tags, metadata, status: 'new' }),
     });
 
     if (!response.ok) {
@@ -84,7 +100,6 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     return res.status(200).send(
       `<Response><Message>Saved to ${category}: ${url.substring(0, 60)}</Message></Response>`
     );
-
   } catch (error) {
     console.error('Processing error:', error);
     return res.status(500).json({ error: 'Processing failed' });
