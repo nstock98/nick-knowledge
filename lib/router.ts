@@ -1,11 +1,12 @@
 // AI intent router — files non-link WhatsApp messages into the right Notion
-// database, using OpenAI to pick the destination and fill in the fields.
+// database, using AI to pick the destination and fill in the fields.
+// Uses lib/ai.ts: OpenAI first, automatic Claude fallback.
 //
-// Requires: NOTION_API_KEY, OPENAI_API_KEY (and optionally OPENAI_MODEL).
+// Requires: NOTION_API_KEY, OPENAI_API_KEY (optionally ANTHROPIC_API_KEY for fallback).
 // Database IDs are hardcoded below (they're stable); override via env if ever needed.
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+import { chatComplete } from './ai';
+
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const NOTION_VERSION = '2022-06-28';
 const NOTION_BASE = 'https://api.notion.com/v1';
@@ -67,23 +68,14 @@ Rules: pick exactly one intent. Fill every field you reasonably can from the mes
 
 export async function classifyMessage(message: string): Promise<Routed> {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: CLASSIFY_PROMPT.replace('{TODAY}', today) },
-        { role: 'user', content: message },
-      ],
-      max_tokens: 300,
-      temperature: 0,
-    }),
+  const content = await chatComplete({
+    system: CLASSIFY_PROMPT.replace('{TODAY}', today),
+    user: message,
+    maxTokens: 300,
+    temperature: 0,
+    json: true,
   });
-  if (!res.ok) throw new Error(`OpenAI classify failed (${res.status}): ${await res.text()}`);
-  const data = await res.json();
-  const parsed = JSON.parse(data.choices?.[0]?.message?.content || '{}');
+  const parsed = JSON.parse(content || '{}');
   if (!parsed.intent) parsed.intent = 'task';
   if (!parsed.title) parsed.title = message.slice(0, 120);
   return parsed as Routed;
