@@ -1,13 +1,12 @@
 // Shared AI Q&A logic: pulls relevant saved items from Notion as context,
-// then asks OpenAI to generate an answer (workout plan, meal plan, etc.)
+// then asks the AI to generate an answer (workout plan, meal plan, etc.)
 // grounded in what Nick has actually saved.
 //
-// Requires: OPENAI_API_KEY (and optionally OPENAI_MODEL, defaults to gpt-4o-mini)
+// Uses lib/ai.ts: OpenAI first, automatic Claude fallback if OpenAI fails.
+// Requires: OPENAI_API_KEY (and optionally ANTHROPIC_API_KEY for fallback).
 
 import { queryKnowledgeItems, KnowledgeItem } from './notion';
-
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+import { chatComplete } from './ai';
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   Fitness: ['workout', 'gym', 'exercise', 'training', 'run', 'lift', 'cardio', 'muscle', 'strength'],
@@ -77,28 +76,10 @@ Use the saved items below as your primary source of inspiration and material whe
 Saved items:
 ${context}`;
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: question },
-      ],
-      max_tokens: 700,
-      temperature: 0.6,
-    }),
+  return chatComplete({
+    system: systemPrompt,
+    user: question,
+    maxTokens: 700,
+    temperature: 0.6,
   });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`OpenAI request failed (${res.status}): ${errText}`);
-  }
-
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content?.trim() || "Sorry, I couldn't generate an answer just then.";
 }
