@@ -51,7 +51,13 @@ interface Routed {
   cadence?: string; // Weekly | Fortnightly | Monthly | Quarterly | Yearly
 }
 
-const CLASSIFY_PROMPT = `You are a router for Nick's Notion life dashboard. Given a short WhatsApp message, output STRICT JSON deciding where it should be filed. Today's date is {TODAY} (Melbourne).
+const CLASSIFY_PROMPT = `You are a router for Nick's Notion life dashboard. Given a WhatsApp message, output STRICT JSON: {"items": [...]} — an array because one message may contain SEVERAL distinct things to capture. Today's date is {TODAY} (Melbourne).
+
+Splitting rules:
+- "buy milk and eggs, also book dentist" → three items: shopping "Milk", shopping "Eggs", task "Book dentist"
+- Separate shopping items get one entry EACH (so they can be ticked off individually)
+- A single coherent thought stays ONE item — don't over-split
+- Each item follows the intent schemas below.
 
 Intents and their fields:
 - "task"            → personal to-do. Fields: title, priority (High/Medium/Low), area (Work/Personal/Side Hustle/Health/Finance/Home), due (YYYY-MM-DD, only if stated/implied), notes
@@ -64,21 +70,26 @@ Intents and their fields:
 - "self_improvement"→ books/courses/podcasts/skills to work on. Fields: title, type (Book/Course/Podcast/Skill/Habit/Reflection), notes
 - "question"        → the message asks a question or requests a plan/summary rather than capturing something. Fields: title (the question).
 
-Rules: pick exactly one intent. Fill every field you reasonably can from the message; omit fields you can't infer. Titles should be clean and short (not the raw message). Output ONLY the JSON object.`;
+Rules: each item has exactly one intent. Fill every field you reasonably can; omit fields you can't infer. Titles should be clean and short (not the raw message). Output ONLY the JSON object, e.g. {"items": [{"intent": "shopping", "title": "Milk", "list": "Groceries"}]}.`;
 
-export async function classifyMessage(message: string): Promise<Routed> {
+export async function classifyMessages(message: string): Promise<Routed[]> {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Melbourne' }).format(new Date());
   const content = await chatComplete({
     system: CLASSIFY_PROMPT.replace('{TODAY}', today),
     user: message,
-    maxTokens: 300,
+    maxTokens: 800,
     temperature: 0,
     json: true,
   });
   const parsed = JSON.parse(content || '{}');
-  if (!parsed.intent) parsed.intent = 'task';
-  if (!parsed.title) parsed.title = message.slice(0, 120);
-  return parsed as Routed;
+  let items: any[] = Array.isArray(parsed.items) ? parsed.items : [parsed];
+  items = items.filter((i) => i && typeof i === 'object').slice(0, 15); // sanity cap
+  if (items.length === 0) items = [{}];
+  for (const item of items) {
+    if (!item.intent) item.intent = 'task';
+    if (!item.title) item.title = message.slice(0, 120);
+  }
+  return items as Routed[];
 }
 
 // --- Notion helpers -------------------------------------------------------
