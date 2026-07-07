@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createKnowledgeItem } from '../lib/notion';
 import { answerQuestion } from '../lib/qa';
-import { classifyMessage, fileItem } from '../lib/router';
+import { classifyMessages, fileItem } from '../lib/router';
 
 // Escape a keyword for safe use inside a RegExp.
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -70,16 +70,37 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     }
 
     try {
-      const routed = await classifyMessage(text);
+      const routed = await classifyMessages(text);
+      const captures = routed.filter((r) => r.intent !== 'question');
+      const questions = routed.filter((r) => r.intent === 'question');
 
-      if (routed.intent === 'question') {
+      // Pure question(s) — answer from the Second Brain as before.
+      if (captures.length === 0) {
         const answer = await answerQuestion(text);
         const truncated = answer.length > 1500 ? answer.slice(0, 1450) + '…' : answer;
         return res.status(200).send(`<Response><Message>${xmlEscape(truncated)}</Message></Response>`);
       }
 
-      const confirmation = await fileItem(routed);
-      return res.status(200).send(`<Response><Message>${xmlEscape(confirmation)}</Message></Response>`);
+      // File all captures in parallel — one confirmation line each.
+      const results = await Promise.allSettled(captures.map((c) => fileItem(c)));
+      const lines = results.map((r, i) =>
+        r.status === 'fulfilled' ? r.value : `⚠️ Couldn't file: ${captures[i].title}`
+      );
+
+      let reply = lines.join('\n');
+
+      // If a question was mixed in with captures, answer it too (space permitting).
+      if (questions.length > 0) {
+        try {
+          const answer = await answerQuestion(questions.map((q) => q.title).join(' '));
+          reply += '\n\n' + answer;
+        } catch (qaError) {
+          console.error('Mixed-message Q&A error:', qaError);
+        }
+      }
+
+      if (reply.length > 1500) reply = reply.slice(0, 1450) + '…';
+      return res.status(200).send(`<Response><Message>${xmlEscape(reply)}</Message></Response>`);
     } catch (routeError) {
       console.error('Routing error:', routeError);
       return res
