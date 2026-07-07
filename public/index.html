@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>The Reference Desk — Second Brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2ead9;
+    --paper-dark: #e7dcc4;
+    --ink: #2b2420;
+    --ink-soft: #5a4f42;
+    --rule: #c9b98f;
+    --stamp: #9c3b2e;
+    --stamp-soft: #b8563f22;
+    --card-shadow: 0 1px 0 rgba(43,36,32,0.08), 0 8px 20px -12px rgba(43,36,32,0.35);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(ellipse at top left, rgba(255,255,255,0.35), transparent 55%),
+      radial-gradient(ellipse at bottom right, rgba(0,0,0,0.05), transparent 60%),
+      var(--paper);
+    color: var(--ink);
+    font-family: 'Courier Prime', monospace;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(43,36,32,0.015) 0px, rgba(43,36,32,0.015) 1px, transparent 1px, transparent 3px);
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 28px 18px 120px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    text-align: center;
+    padding: 18px 0 22px;
+    border-bottom: 2px solid var(--rule);
+    margin-bottom: 26px;
+    position: relative;
+  }
+
+  header .kicker {
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--stamp);
+    font-weight: 700;
+  }
+
+  header h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 34px;
+    margin: 6px 0 4px;
+    letter-spacing: -0.01em;
+  }
+
+  header p {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  .stamp-corner {
+    position: absolute;
+    top: 8px;
+    right: 0;
+    border: 1.5px solid var(--stamp);
+    color: var(--stamp);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    transform: rotate(4deg);
+    font-weight: 700;
+    opacity: 0.85;
+  }
+
+  #feed {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .prompt-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .chip {
+    font-family: 'Courier Prime', monospace;
+    font-size: 11.5px;
+    border: 1px dashed var(--rule);
+    background: rgba(255,255,255,0.35);
+    color: var(--ink-soft);
+    padding: 7px 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .chip:hover { border-color: var(--stamp); color: var(--stamp); background: rgba(255,255,255,0.6); }
+
+  .card {
+    background: #fffdf8;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    box-shadow: var(--card-shadow);
+    padding: 16px 18px;
+    position: relative;
+    animation: rise 0.35s ease both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card.user {
+    background: var(--paper-dark);
+    border-style: dashed;
+  }
+
+  .card .label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--stamp);
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .card.user .label { color: var(--ink-soft); }
+
+  .card .label::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  .card .body {
+    font-size: 14.5px;
+    line-height: 1.65;
+    white-space: pre-wrap;
+    font-family: 'Courier Prime', monospace;
+  }
+
+  .card .body a { color: var(--stamp); }
+
+  .thinking .body {
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+
+  .thinking .dots span {
+    animation: blink 1.2s infinite;
+    animation-fill-mode: both;
+  }
+  .thinking .dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking .dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
+
+  form#composer {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 2;
+    background: linear-gradient(to top, var(--paper) 60%, transparent);
+    padding: 22px 18px 20px;
+  }
+
+  .composer-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+    background: #fffdf8;
+    border: 1.5px solid var(--ink);
+    border-radius: 3px;
+    padding: 6px 6px 6px 14px;
+    box-shadow: var(--card-shadow);
+  }
+
+  textarea#question {
+    flex: 1;
+    border: none;
+    background: transparent;
+    resize: none;
+    font-family: 'Courier Prime', monospace;
+    font-size: 14.5px;
+    color: var(--ink);
+    padding: 10px 0;
+    max-height: 120px;
+    line-height: 1.5;
+  }
+  textarea#question:focus { outline: none; }
+  textarea#question::placeholder { color: #a89a80; }
+
+  button#send {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 13px;
+    background: var(--stamp);
+    color: var(--paper);
+    border: none;
+    border-radius: 2px;
+    padding: 0 20px;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  button#send:hover { background: #7f2f24; }
+  button#send:active { transform: scale(0.97); }
+  button#send:disabled { opacity: 0.4; cursor: default; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 10px;
+    color: var(--ink-soft);
+  }
+  .empty-state .glyph {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 42px;
+    color: var(--stamp);
+    margin-bottom: 6px;
+  }
+  .empty-state p { font-size: 13px; max-width: 380px; margin: 4px auto 0; line-height: 1.6; }
+
+  @media (max-width: 480px) {
+    header h1 { font-size: 27px; }
+    .stamp-corner { display: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <span class="stamp-corner">Est. Whenever</span>
+      <div class="kicker">Reference Desk</div>
+      <h1>Ask Your Second Brain</h1>
+      <p>Everything you've filed away, on call.</p>
+    </header>
+
+    <div id="feed">
+      <div class="empty-state" id="emptyState">
+        <div class="glyph">§</div>
+        <p>Ask for a workout, a meal plan, a business idea — anything pulled from what you've already saved. Try one of these, or type your own below.</p>
+        <div class="prompt-suggestions">
+          <div class="chip" data-q="What should my workout be today if I want to focus on legs and core?">Today's workout — legs &amp; core</div>
+          <div class="chip" data-q="Build me a meal plan for under $70 based on recipes I've saved this week. Aim for 2200 calories and 150g protein a day.">Meal plan under $70</div>
+          <div class="chip" data-q="What have I saved this week?">What did I save this week?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form id="composer">
+    <div class="composer-inner">
+      <textarea id="question" rows="1" placeholder="Ask anything…" required></textarea>
+      <button id="send" type="submit">Ask</button>
+    </div>
+  </form>
+
+<script>
+  const feed = document.getElementById('feed');
+  const emptyState = document.getElementById('emptyState');
+  const form = document.getElementById('composer');
+  const input = document.getElementById('question');
+  const sendBtn = document.getElementById('send');
+
+  function linkify(text) {
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    return escaped.replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }
+
+  function addCard({ label, body, kind }) {
+    if (emptyState) emptyState.remove();
+    const card = document.createElement('div');
+    card.className = 'card ' + (kind || '');
+    card.innerHTML = `<div class="label">${label}</div><div class="body">${body}</div>`;
+    feed.appendChild(card);
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    return card;
+  }
+
+  function addThinkingCard() {
+    if (emptyState) emptyState.remove();
+    const card = document.createElement('div');
+    card.className = 'card thinking';
+    card.innerHTML = `<div class="label">The Archive</div><div class="body">Checking the stacks<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>`;
+    feed.appendChild(card);
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    return card;
+  }
+
+  async function ask(question) {
+    addCard({ label: 'You Asked', body: linkify(question), kind: 'user' });
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    const thinkingCard = addThinkingCard();
+
+    try {
+      const res = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      thinkingCard.remove();
+
+      if (!res.ok) {
+        addCard({ label: 'The Archive', body: 'Something went wrong: ' + (data.error || res.status) });
+      } else {
+        addCard({ label: 'The Archive', body: linkify(data.answer || 'No answer came back.') });
+      }
+    } catch (err) {
+      thinkingCard.remove();
+      addCard({ label: 'The Archive', body: 'Couldn’t reach the archive — check your connection and try again.' });
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q) return;
+    ask(q);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+
+  document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => ask(chip.dataset.q));
+  });
+</script>
+</body>
+</html>
