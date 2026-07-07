@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/enrich-notion",
+      "schedule": "0 9 * * *"
+    },
+    {
       "path": "/api/daily-digest",
       "schedule": "30 9 * * *"
     }
