@@ -4,14 +4,16 @@
 //   NOTION_API_KEY      — the Internal Integration Secret from notion.so/my-integrations
 //   NOTION_DATABASE_ID  — the "Saved Items" database ID (32-char string from its URL)
 //
-// The database is expected to have these properties:
+// The database is expected to have these properties (matching what actually
+// got created in Notion — note "url" is lowercase and "Status" is Notion's
+// built-in status type, not a plain select):
 //   Name             (title)
-//   URL              (url)
+//   url              (url)
 //   Description      (text)
 //   Category         (select: Work, Finance, Fitness, Food & Recipes, Side Hustles, Uncategorized)
 //   Tags             (multi-select)
 //   Content Excerpt  (text)
-//   Status           (select: new, reviewed, archived)
+//   Status           (status: New, Reviewed, Archived)
 
 const NOTION_API_KEY = process.env.NOTION_API_KEY;
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID;
@@ -49,12 +51,12 @@ function parsePage(page: any): KnowledgeItem {
   return {
     id: page.id,
     name: (props.Name?.title || []).map((t: any) => t.plain_text).join(''),
-    url: props.URL?.url || '',
+    url: props.url?.url || '',
     description: (props.Description?.rich_text || []).map((t: any) => t.plain_text).join(''),
     category: props.Category?.select?.name || 'Uncategorized',
     tags: (props.Tags?.multi_select || []).map((t: any) => t.name),
     contentExcerpt: (props['Content Excerpt']?.rich_text || []).map((t: any) => t.plain_text).join(''),
-    status: props.Status?.select?.name || 'new',
+    status: props.Status?.status?.name || 'New',
     createdTime: page.created_time,
   };
 }
@@ -81,7 +83,7 @@ export async function createKnowledgeItem(params: {
       parent: { database_id: NOTION_DATABASE_ID },
       properties: {
         Name: { title: [{ text: { content: truncate(params.name || 'Untitled', 200) } }] },
-        URL: { url: params.url || null },
+        url: { url: params.url || null },
         Description: { rich_text: [{ text: { content: truncate(params.description) } }] },
         Category: { select: { name: params.category } },
         Tags: {
@@ -90,7 +92,7 @@ export async function createKnowledgeItem(params: {
             .slice(0, 10)
             .map((t) => ({ name: t.slice(0, 90) })),
         },
-        Status: { select: { name: 'new' } },
+        Status: { status: { name: 'New' } },
       },
     }),
   });
